@@ -6,7 +6,7 @@ const getAllProductsStatic = async(req, res) => {
 }
 
 const getAllProducts = async(req, res) => {
-    const { featured, company, name } = req.query;
+    const { featured, company, name, sort, limit, page, numericFilters } = req.query;
     const queryObject = {};
 
     if (featured) {
@@ -18,9 +18,43 @@ const getAllProducts = async(req, res) => {
     if (name) {
         queryObject.name = { $regex: name, $options: 'i' };
     }
+    let result = Product.find(queryObject)
 
-    const products = await Product.find(queryObject).sort('price');
-    console.log(req.query);
+    if (sort) {
+        const sortList = sort.split(',').join(' ');
+        result = result.sort(sortList);
+    } else {
+        result = result.sort('createdAt');
+    }
+
+    if (numericFilters) {
+        const operatorMap = {
+            '>': '$gt',
+            '>=': '$gte',
+            '=': '$eq',
+            '<': '$lt',
+            '<=': '$lte',
+        };
+        const regEx = /\b(>|>=|=|<|<=)\b/g;
+        let filters = numericFilters.replace(regEx, (match) => `-${operatorMap[match]}-`);
+        const options = ['price', 'rating'];
+        filters = filters.split(',').forEach((item) => {
+            const [field, operator, value] = item.split('-');
+            if (options.includes(field)) {
+                queryObject[field] = {
+                    [operator]: Number(value)
+                };
+            }
+        });
+    }
+
+    const pageNumber = Number(page) || 1;
+    const limitNumber = Number(limit) || 23;
+    const skip = (pageNumber - 1) * limitNumber;
+
+    result = result.skip(skip).limit(limitNumber);
+
+    const products = await result;
     res.status(200).json({ products, nbHits: products.length });
 }
 
